@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f6f2ec">
+    <meta name="description" content="Plan a comfortable stay at Hotel Titan.">
+    <title>Hotel Titan — Stay a little better</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Hotel Titan home">
+        <span class="brand-mark" aria-hidden="true">T</span>
+        <span>HOTEL <strong>TITAN</strong></span>
+      </a>
+      <div class="topbar-note"><span class="status-dot"></span> Your next stay starts here</div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow"><span></span> A PLACE TO ARRIVE</p>
+          <h1>Make room<br>for <em>something</em><br>good.</h1>
+          <p class="hero-description">Thoughtful stays, warm welcomes, and a little more time to enjoy the journey.</p>
+          <div class="hero-footnote"><span aria-hidden="true">✳</span> A calmer kind of getaway</div>
+        </div>
+        <div class="hero-image" role="img" aria-label="Sunlit hotel room with a mountain view">
+          <div class="image-caption">
+            <span class="caption-kicker">THE HOTEL TITAN EXPERIENCE</span>
+            <span class="caption-title">Stay for the feeling.</span>
+          </div>
+          <span class="image-index">01 <span>—</span> 03</span>
+        </div>
+      </section>
+
+      <section class="content-panel booking-panel">
+        <div class="panel-intro">
+          <p class="eyebrow">BOOK YOUR STAY</p>
+          <h2>A good stay<br>starts here.</h2>
+          <p>Choose your room and dates. No account needed.</p>
+          <div class="privacy-note"><span aria-hidden="true">✓</span> A simple booking, with no sign-in required.</div>
+        </div>
+        <div class="form-area">
+          <form id="booking-form" class="form-grid" novalidate>
+            <label class="field field-wide">Your name
+              <input name="guestName" autocomplete="name" placeholder="Name for the booking" maxlength="80" required>
+            </label>
+            <label class="field">Room
+              <select name="roomType" required>
+                <option>Single Room</option>
+                <option>Couple Room</option>
+                <option>Family Room</option>
+              </select>
+            </label>
+            <label class="field">Guests
+              <select name="guests">
+                <option value="1">1 guest</option>
+                <option value="2" selected>2 guests</option>
+                <option value="3">3 guests</option>
+                <option value="4">4 guests</option>
+                <option value="5">5 guests</option>
+                <option value="6">6 guests</option>
+              </select>
+            </label>
+            <label class="field">Check-in date
+              <input name="checkIn" type="date" required>
+            </label>
+            <label class="field">Check-out date
+              <input name="checkOut" type="date" required>
+            </label>
+            <label class="field field-wide">Phone number
+              <input name="phone" type="tel" autocomplete="tel" placeholder="Phone number" minlength="7" maxlength="20" required>
+            </label>
+            <button class="button button-primary field-wide" type="submit">Book my stay <span aria-hidden="true">→</span></button>
+          </form>
+          <p id="booking-message" class="message" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+    </main>
+
+    <footer><span>HOTEL TITAN</span><span>Made for a stay worth remembering.</span></footer>
+  </body>
+</html>
