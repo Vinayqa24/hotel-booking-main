@@ -1,0 +1,45 @@
+{
+  "status": "PENDING_INPUTS",
+  "jira": {
+    "key": "SCRUM-26",
+    "url": "https://vinayqa24-1792155730342.atlassian.net/browse/SCRUM-26"
+  },
+  "evidence": {
+    "primary_storage": "Jira attachments on SCRUM-26 (recommended)",
+    "optional_repo_path": "docs/evidence/SCRUM-26/",
+    "screenshot_naming_convention": [
+      "01-search.png",
+      "02-results.png",
+      "03-details.png",
+      "04-booking.png",
+      "05-confirm.png"
+    ]
+  },
+  "intake": {
+    "template": "docs/intake/app-intake.md",
+    "app_description_template": "docs/intake/app-description-template.md"
+  },
+  "current_features": [],
+  "gaps": [
+    {
+      "gap": "Screenshot(s) and app description not yet provided",
+      "impact": "Cannot produce evidence-based feature inventory or prioritized enhancements until inputs are collected.",
+      "severity": "P0"
+    }
+  ],
+  "enhancements": [],
+  "nfrs": [
+    "Security/Privacy: Evidence must not contain secrets or real customer PII. Use synthetic data or redact as needed.",
+    "Traceability: All evidence and deliverables must be linkable from SCRUM-26.",
+    "Usaibility: The intake template should be fillable in <= 10 minutes."
+  ],
+  "assumptions": [
+    "Stakeholders will attach readable screenshots to SCRUM-26 and/or provide stable links."
+  ],
+  "risks": [
+    {
+      "risk": "Evidence may be incomplete or blurry",
+      "mitigation": "Use the completeness rubric in docs/intake/app-intake.md and request specific additional screenshots."
+    }
+  ]
+}
