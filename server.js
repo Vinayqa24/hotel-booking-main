@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const crypto = require("node:crypto");
 const express = require("express");
 const { DatabaseSync } = require("node:sqlite");
 
@@ -15,13 +16,19 @@ function createDatabase(databasePath) {
     CREATE TABLE IF NOT EXISTS bookings (
       id INTEGER PRIMARY KEY,
       guest_name TEXT NOT NULL,
+      guest_email TEXT NOT NULL DEFAULT '',
       room_type TEXT NOT NULL,
       check_in TEXT NOT NULL,
       check_out TEXT NOT NULL,
       guests INTEGER NOT NULL CHECK (guests BETWEEN 1 AND 6),
       phone TEXT NOT NULL,
+      booking_reference TEXT,
+      status TEXT NOT NULL DEFAULT 'Confirmed',
+      idempotency_key TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_bookings_reference ON bookings(booking_reference);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_bookings_idempotency ON bookings(idempotency_key);
   `);
 
   const bookingColumns = db.prepare("PRAGMA table_info(bookings)").all()
@@ -46,18 +53,23 @@ function createDatabase(databasePath) {
         CREATE TABLE bookings_new (
           id INTEGER PRIMARY KEY,
           guest_name TEXT NOT NULL,
+          guest_email TEXT NOT NULL DEFAULT '',
           room_type TEXT NOT NULL,
           check_in TEXT NOT NULL,
           check_out TEXT NOT NULL,
           guests INTEGER NOT NULL CHECK (guests BETWEEN 1 AND 6),
           phone TEXT NOT NULL,
+          booking_reference TEXT,
+          status TEXT NOT NULL DEFAULT 'Confirmed',
+          idempotency_key TEXT,
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         INSERT INTO bookings_new (
-          id, guest_name, room_type, check_in, check_out, guests, phone, created_at
+          id, guest_name, guest_email, room_type, check_in, check_out, guests, phone, created_at
         )
         SELECT bookings.id,
           COALESCE(NULLIF(trim(users.first_name || ' ' || users.last_name), ''), 'Previous guest'),
+          COALESCE(users.email, ''),
           bookings.room_type,
           bookings.check_in,
           bookings.check_out,
@@ -76,6 +88,15 @@ function createDatabase(databasePath) {
     }
   }
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS booking_idempotency (
+      idempotency_key TEXT PRIMARY KEY,
+      booking_reference TEXT NOT NULL,
+      payload_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
   return db;
 }
 
@@ -87,7 +108,91 @@ function isCalendarDate(value) {
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
-function parseBooking(body) {
+function isValidEmail(value) {
+  if (typeof value !== "string") return false;
+  const trimmed = value.trim();
+  if (trimmed.length < 3 || trimmed.length > 254) return false;
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmed);
+}
+
+function sha256Json(value) {
+  return crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+function createCorrelationId() {
+  return crypto.randomUUID();
+}
+
+function createBookingReference() {
+  return `BK-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+}
+
+function apiError(response, status, { errorCode, message, correlationId }) {
+  response.status(status).json({ errorCode, message, correlationId });
+}
+
+function parseWizardBooking(body) {
+  if (!body || typeof body !== "object") {
+    return null;
+  }
+
+  const hotelId = typeof body.hotelId === "string" ? body.hotelId.trim() : "";
+  const hotelName = typeof body.hotelName === "string" ? body.hotelName.trim() : "";
+  const roomType = typeof body.roomType === "string" ? body.roomType : "";
+  const checkInDate = body.checkInDate;
+  const checkOutDate = body.checkOutDate;
+  const rooms = body.rooms;
+  const adults = body.adults;
+  const children = body.children ?? 0;
+  const guest = body.guest;
+  const pricing = body.pricing;
+
+  const totalAmount = pricing && typeof pricing.totalAmount === "number" ? pricing.totalAmount : NaN;
+  const currency = pricing && typeof pricing.currency === "string" ? pricing.currency.trim() : "";
+
+  const guestFullName = guest && typeof guest.fullName === "string" ? guest.fullName.trim() : "";
+  const guestEmail = guest && typeof guest.email === "string" ? guest.email.trim() : "";
+  const guestPhone = guest && typeof guest.phone === "string" ? guest.phone.trim() : "";
+
+  if (!hotelId || !hotelName) return null;
+  if (!ROOM_TYPES.has(roomType)) return null;
+  if (!isCalendarDate(checkInDate) || !isCalendarDate(checkOutDate)) return null;
+
+  const today = new Date().toISOString().slice(0, 10);
+  if (checkInDate < today) return null;
+  if (checkOutDate <= checkInDate) return null;
+
+  const maxStayNights = 30;
+  const stayNights = (new Date(`${checkOutDate}T00:00:00Z`) - new Date(`${checkInDate}T00:00:00Z`)) / (1000 * 60 * 60 * 24);
+  if (!Number.isFinite(stayNights) || stayNights <= 0 || stayNights > maxStayNights) return null;
+
+  if (!Number.isInteger(rooms) || rooms < 1 || rooms > 5) return null;
+  if (!Number.isInteger(adults) || adults < 1 || adults > 10) return null;
+  if (!Number.isInteger(children) || children < 0 || children > 10) return null;
+
+  if (!guestFullName || guestFullName.length > 80) return null;
+  if (!isValidEmail(guestEmail)) return null;
+
+  if (guestPhone && !/^[0-9+() -]{7,20}$/.test(guestPhone)) return null;
+
+  if (!Number.isFinite(totalAmount) || totalAmount <= 0) return null;
+  if (!currency || currency.length > 8) return null;
+
+  return {
+    hotelId,
+    hotelName,
+    roomType,
+    checkInDate,
+    checkOutDate,
+    rooms,
+    adults,
+    children,
+    guest: { fullName: guestFullName, email: guestEmail, phone: guestPhone || null },
+    pricing: { totalAmount, currency },
+  };
+}
+
+function parseLegacyBooking(body) {
   if (
     typeof body.guestName !== "string" ||
     body.guestName.trim().length === 0 ||
@@ -113,12 +218,131 @@ async function createApp({ db }) {
   const app = express();
   app.use(express.json({ limit: "10kb" }));
 
+  app.use((request, response, next) => {
+    request.correlationId = request.get("X-Correlation-Id") || createCorrelationId();
+    response.set("X-Correlation-Id", request.correlationId);
+    next();
+  });
+
   app.get("/api/health", (_request, response) => {
     response.json({ status: "ok" });
   });
 
   app.post("/api/bookings", (request, response) => {
-    const input = parseBooking(request.body || {});
+    const correlationId = request.correlationId;
+
+    const idempotencyKey = request.get("Idempotency-Key");
+    if (idempotencyKey) {
+      const payload = parseWizardBooking(request.body);
+      if (!payload) {
+        apiError(response, 400, {
+          errorCode: "VALIDATION_ERROR",
+          message: "Please provide valid booking details (dates, guests, guest name, and email).",
+          correlationId,
+        });
+        return;
+      }
+
+      const payloadHash = sha256Json(payload);
+      const existingMapping = db.prepare(
+        "SELECT booking_reference AS bookingReference, payload_hash AS payloadHash FROM booking_idempotency WHERE idempotency_key = ?"
+      ).get(idempotencyKey);
+
+      if (existingMapping) {
+        if (existingMapping.payloadHash !== payloadHash) {
+          apiError(response, 409, {
+            errorCode: "IDEMPOTENCY_KEY_REUSE",
+            message: "This booking request has already been submitted. Please refresh and try again.",
+            correlationId,
+          });
+          return;
+        }
+
+        const existingBooking = db.prepare(`
+          SELECT booking_reference AS reference, status, guest_name AS guestName, guest_email AS guestEmail,
+            room_type AS roomType, check_in AS checkInDate, check_out AS checkOutDate, guests,
+            phone, created_at AS createdAt
+          FROM bookings
+          WHERE booking_reference = ?
+        `).get(existingMapping.bookingReference);
+
+        if (!existingBooking) {
+          apiError(response, 500, {
+            errorCode: "BOOKING_CREATE_FAILED",
+            message: "We couldn't confirm your booking right now. Please try again.",
+            correlationId,
+          });
+          return;
+        }
+
+        response.status(201).json({
+          reference: existingBooking.reference,
+          status: existingBooking.status,
+          booking: {
+            hotelName: payload.hotelName,
+            checkInDate: payload.checkInDate,
+            checkOutDate: payload.checkOutDate,
+            rooms: payload.rooms,
+            adults: payload.adults,
+            children: payload.children,
+            totalAmount: payload.pricing.totalAmount,
+            currency: payload.pricing.currency,
+          },
+        });
+        return;
+      }
+
+      const bookingReference = createBookingReference();
+      try {
+        db.exec("BEGIN");
+        db.prepare(`
+          INSERT INTO bookings (
+            guest_name, guest_email, room_type, check_in, check_out, guests, phone,
+            booking_reference, status, idempotency_key
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Confirmed', ?)
+        `).run(
+          payload.guest.fullName,
+          payload.guest.email,
+          payload.roomType,
+          payload.checkInDate,
+          payload.checkOutDate,
+          Math.min(6, payload.adults + payload.children),
+          payload.guest.phone || "0000000",
+          bookingReference,
+          idempotencyKey,
+        );
+        db.prepare(
+          "INSERT INTO booking_idempotency (idempotency_key, booking_reference, payload_hash) VALUES (?, ?, ?)"
+        ).run(idempotencyKey, bookingReference, payloadHash);
+        db.exec("COMMIT");
+      } catch (error) {
+        db.exec("ROLLBACK");
+        apiError(response, 500, {
+          errorCode: "BOOKING_CREATE_FAILED",
+          message: "We couldn't confirm your booking right now. Please try again.",
+          correlationId,
+        });
+        return;
+      }
+
+      response.status(201).json({
+        reference: bookingReference,
+        status: "Confirmed",
+        booking: {
+          hotelName: payload.hotelName,
+          checkInDate: payload.checkInDate,
+          checkOutDate: payload.checkOutDate,
+          rooms: payload.rooms,
+          adults: payload.adults,
+          children: payload.children,
+          totalAmount: payload.pricing.totalAmount,
+          currency: payload.pricing.currency,
+        },
+      });
+      return;
+    }
+
+    const input = parseLegacyBooking(request.body || {});
     if (!input) {
       response.status(400).json({ error: "Please enter your name, a valid room, dates, guests, and phone number." });
       return;
@@ -145,12 +369,21 @@ async function createApp({ db }) {
 
   app.use(express.static(path.join(__dirname, "public")));
   app.use((error, _request, response, _next) => {
+    const correlationId = _request.correlationId || createCorrelationId();
     if (error instanceof SyntaxError && error.status === 400 && "body" in error) {
-      response.status(400).json({ error: "The request body must be valid JSON." });
+      apiError(response, 400, {
+        errorCode: "INVALID_JSON",
+        message: "The request body must be valid JSON.",
+        correlationId,
+      });
       return;
     }
     console.error(error);
-    response.status(500).json({ error: "Something went wrong. Please try again." });
+    apiError(response, 500, {
+      errorCode: "INTERNAL_SERVER_ERROR",
+      message: "Something went wrong. Please try again.",
+      correlationId,
+    });
   });
 
   return app;
