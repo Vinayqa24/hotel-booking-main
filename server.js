@@ -8,7 +8,7 @@ const ROOM_TYPES = new Set(["Single Room", "Couple Room", "Family Room"]);
 
 function createDatabase(databasePath) {
   if (databasePath !== ":memory:") {
-    fs.mkdirSync(path.dirname(databasePath), { recursive: true });
+    fs.mkdirSync(path.resolve(path.dirname(databasePath)), { recursive: true });
   }
 
   const db = new DatabaseSync(databasePath);
@@ -27,8 +27,10 @@ function createDatabase(databasePath) {
       idempotency_key TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_bookings_reference ON bookings(booking_reference);
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_bookings_idempotency ON bookings(idempotency_key);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_bookings_reference_nonnull ON bookings(booking_reference)
+      WHERE booking_reference IS NOT NULL;
+    CREATE UNIQU INDEX IF NOT EXISTS idx_bookings_idempotency_nonnull ON bookings(idempotency_key)
+      WHERE idempotency_key IS NOT NULL;
   `);
 
   const bookingColumns = db.prepare("PRAGMA table_info(bookings)").all()
@@ -68,7 +70,8 @@ function createDatabase(databasePath) {
           id, guest_name, guest_email, room_type, check_in, check_out, guests, phone, created_at
         )
         SELECT bookings.id,
-          COALESCE(NULLIF(trim(users.first_name || ' ' || users.last_name), ''), 'Previous guest'),
+          COALESCE(NULLIF(            trim(users.first_name || ' ' || users.last_name), ''),
+            'Previous guest'),
           COALESCE(users.email, ''),
           bookings.room_type,
           bookings.check_in,
@@ -76,8 +79,7 @@ function createDatabase(databasePath) {
           MIN(6, MAX(1, bookings.adults + bookings.children)),
           bookings.phone,
           bookings.created_at
-        FROM bookings
-        LEFT JOIN users ON users.id = bookings.user_id;
+        FROM booking        LEFT JOIN users ON users.id = bookings.user_id;
         DROP TABLE bookings;
         ALTER TABLE bookings_new RENAME TO bookings;
       `);
@@ -216,7 +218,7 @@ function parseLegacyBooking(body) {
 
 async function createApp({ db }) {
   const app = express();
-  app.use(express.json({ limit: "10kb" }));
+  app.use(express.json( { limit: "10kb" }));
 
   app.use((request, response, next) => {
     request.correlationId = request.get("X-Correlation-Id") || createCorrelationId();
@@ -259,97 +261,17 @@ async function createApp({ db }) {
         }
 
         const existingBooking = db.prepare(`
-          SELECT booking_reference AS reference, status, guest_name AS guestName, guest_email AS guestEmail,
-            room_type AS roomType, check_in AS checkInDate, check_out AS checkOutDate, guests,
-            phone, created_at AS createdAt
+          SELECT booking_reference AS reference, status,
+            check_in AS checkInDate, check_out AS checkOutDate,
+            guests,
+            created_at AS createdAt
           FROM bookings
           WHERE booking_reference = ?
-        `).get(existingMapping.bookingReference);
+        `)).get(existingMapping.bookingReference);
 
         if (!existingBooking) {
           apiError(response, 500, {
-            errorCode: "BOOKING_CREATE_FAILED",
-            message: "We couldn't confirm your booking right now. Please try again.",
-            correlationId,
-          });
-          return;
-        }
-
-        response.status(201).json({
-          reference: existingBooking.reference,
-          status: existingBooking.status,
-          booking: {
-            hotelName: payload.hotelName,
-            checkInDate: payload.checkInDate,
-            checkOutDate: payload.checkOutDate,
-            rooms: payload.rooms,
-            adults: payload.adults,
-            children: payload.children,
-            totalAmount: payload.pricing.totalAmount,
-            currency: payload.pricing.currency,
-          },
-        });
-        return;
-      }
-
-      const bookingReference = createBookingReference();
-      try {
-        db.exec("BEGIN");
-        db.prepare(`
-          INSERT INTO bookings (
-            guest_name, guest_email, room_type, check_in, check_out, guests, phone,
-            booking_reference, status, idempotency_key
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Confirmed', ?)
-        `).run(
-          payload.guest.fullName,
-          payload.guest.email,
-          payload.roomType,
-          payload.checkInDate,
-          payload.checkOutDate,
-          Math.min(6, payload.adults + payload.children),
-          payload.guest.phone || "0000000",
-          bookingReference,
-          idempotencyKey,
-        );
-        db.prepare(
-          "INSERT INTO booking_idempotency (idempotency_key, booking_reference, payload_hash) VALUES (?, ?, ?)"
-        ).run(idempotencyKey, bookingReference, payloadHash);
-        db.exec("COMMIT");
-      } catch (error) {
-        db.exec("ROLLBACK");
-        apiError(response, 500, {
-          errorCode: "BOOKING_CREATE_FAILED",
-          message: "We couldn't confirm your booking right now. Please try again.",
-          correlationId,
-        });
-        return;
-      }
-
-      response.status(201).json({
-        reference: bookingReference,
-        status: "Confirmed",
-        booking: {
-          hotelName: payload.hotelName,
-          checkInDate: payload.checkInDate,
-          checkOutDate: payload.checkOutDate,
-          rooms: payload.rooms,
-          adults: payload.adults,
-          children: payload.children,
-          totalAmount: payload.pricing.totalAmount,
-          currency: payload.pricing.currency,
-        },
-      });
-      return;
-    }
-
-    const input = parseLegacyBooking(request.body || {});
-    if (!input) {
-      response.status(400).json({ error: "Please enter your name, a valid room, dates, guests, and phone number." });
-      return;
-    }
-
-    const result = db.prepare(`
-      INSERT INTO bookings (guest_name, room_type, check_in, check_out, guests, phone)
+            errorCodfS¢$$ôô´”äuô5$TDUôd”ÄTB"À¢ÖW76vS¢%vR6÷VÆFâwB6öæf—&Ò–÷W"&öö¶–ær&–v‡Bæ÷râÆV6RG'’v–ââ"À¢6÷'&VÆF–öä–BÀ¢Ò“°¢&WGW&ã°¢Ğ ¢&W7öç6Rç7FGW2ƒ#’æ§6öâ‚°¢&VfW&Væ6S¢W†—7F–æt&öö¶–ærç&VfW&Væ6RÀ¢7FGW3¢W†—7F–æt&öö¶–ærç7FGW2À¢&öö¶–æs¢°¢†÷FVÄæÖS¢–ÆöBæ†÷FVÄæÖRÀ¢6†V6´–äFFS¢–ÆöBæ6†V6´–äFFRÀ¢6†V6´÷WDFFS¢–ÆöBæ6†V6´÷WDFFRÀ¢&öö×3¢–ÆöBç&öö×2À¢GVÇG3¢–ÆöBæGVÇG2À¢6†–ÆG&Vã¢–ÆöBæ6†–ÆG&VâÀ¢F÷FÄÖ÷VçC¢–ÆöBç&–6–ærçF÷FÄÖ÷VçBÀ¢7W'&Væ7“¢–ÆöBç&–6–æræ7W'&Væ7’À¢ÒÀ¢Ò“°¢&WGW&ã°¢Ğ ¢6öç7B&öö¶–æu&VfW&Væ6RÒ7&VFT&öö¶–æu&VfW&Væ6R‚“°¢G'’°¢F"æW†V2‚$$Tt”â"“°¢F"ç&W&R† ¢”å4U%B”åDò&öö¶–æw2€¢wVW7EöæÖRÂwVW7EöVÖ–ÂÂ&ööÕ÷G—RÂ6†V6µö–âÂ6†V6µö÷WBÂwVW7G2Â†öæRÀ¢&öö¶–æu÷&VfW&Væ6RÂ7FGW2Â–FV×÷FVæ7•ö¶W¢’dÅTU2ƒòÂòÂòÂòÂòÂòÂòÂòÂt6öæ—&ÖVBrÂò¢’ç'Vâ€¢–ÆöBæwVW7BægVÆÄæÖRÀ¢–ÆöBæwVW7BæVÖ–ÂÀ¢–ÆöBç&ööÕG—RÀ¢–ÆöBæ6†V6´–äFFRÀ¢–ÆöBæ6†V6´÷WDFFRÀ¢ÖF‚æÖ–âƒbÂ–ÆöBæGVÇG2²–ÆöBæ6†–ÆG&Vâ’À¢–ÆöBæwVW7Bç†öæRÀ¢&öö¶–æu&VfW&Væ6RÀ¢–FV×÷FVæ7”¶W’À¢“°¢F"ç&W&R€¢$”å4U%B”åDò&öö¶–æuö–FV×÷FVæ7’†–FV×÷FVæ7•ö¶W’Â&öö¶–æu÷&VfW&Væ6RÂ–ÆöEö†6‚’dÅTU2ƒòÂòÂò’ ¢’ç'Vâ†–FV×÷FVæ7”¶W’Â&öö¶–æu&VfW&Væ6RÂ–ÆöD†6‚“°¢F"æW†V2‚$4ôÔÔ•B"“°¢Ò6F6‚†W'&÷"’°¢F"æW†V2‚%$ôÄÄ$4²"“°¢”W'&÷"‡&W7öç6RÂSÂ°¢W'&÷$6öFS¢$$ôô´”äuô5$TDUôd”ÄTB"À¢ÖW76vS¢%vR6÷VÆFâwB6öæf—&Ò–÷W"&öö¶–ær&–v‡Bæ÷râÆV6RG'’v–ââ"À¢6÷'&VÆF–öä–BÀ¢Ò“°¢&WGW&ã°¢Ğ ¢&W7öç6Rç7FGW2ƒ#’æ§6öâ‡°¢&VfW&Væ6S¢&öö¶–æu&VfW&Væ6RÀ¢7FGW3¢$6öæf—&ÖVB"À¢&öö¶–æs¢°¢†÷FVÄæÖS¢–ÆöBæ†÷FVÄæÖRÀ¢6†V6´–äFFS¢–ÆöBæ6†V6´–äFFRÀ¢6†V6´÷WDFFS¢–ÆöBæ6†V6´÷WDFFRÀ¢&öö×3¢–ÆöBç&öö×2À¢GVÇG3¢–ÆöBæGVÇG2À¢6†–ÆG&Vã¢–ÆöBæ6†–ÆG&VâÀ¢F÷FÄÖ÷VçC¢–ÆöBç&–6–ærçF÷FÄÖ÷VçBÀ¢7W'&Væ7“¢–ÆöBç&–6–æræ7W'&Væ7’À¢ÒÀ¢Ò“°¢&WGW&ã°¢Ğ ¢6öç7B–çWBÒ'6TÆVv7”&öö¶–ær‡&WVW7Bæ&öG’ÇÂ·Ò“°¢–b‚–çWB’°¢&W7öç6Rç7FGW2ƒC’æ§6öâ‚²W'&÷#¢%ÆV6RVçFW"–÷W"æÖRÂfÆ–B&ööÒÂFFW2ÂwVW7G2ÂæB†öæRçVÖ&W"â"Ò“°¢&WGW&ã°¢Ğ ¢6öç7B&W7VÇBÒF"ç&W&R† ¢”å4U%B”åDò&öö¶–æw2†wVW7EöæÖRÂ&ööÕ÷G—RÂ6†V6µö–âÂ6†V6´out, guests, phone)
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(
       input.guestName,
