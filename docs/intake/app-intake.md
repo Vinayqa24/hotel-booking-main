@@ -2,25 +2,26 @@
 
 > Purpose: capture "what exists today" (UI evidence + app context) so the team can produce an evidence-based feature inventory, gap analysis, and prioritized enhancements.
 
- > Do NOT include secrets (passwords, API+s, tokens) or real customer PII. Use synthetic data or redact before sharing.
+> Do NOT include secrets (passwords, API keys, tokens) or real customer PII. Use synthetic data or redact before sharing.
 
 ---
 
 ## 1) Evidence Links (SCRUM-26)
 
-- **Jira story:** https://vinayqa24-1792155730342.atlassian.net/browse/SCRUM-26
-- *(**Recommended**
+- ***J\�a story:** https://vinayqa24-1792155730342.atlassian.net/browse/SCRUM-26
+- **(Recommended)**
   - Attach screenshots directly to SCRUM-26 (keep filenames consistent, e.g. `01-search.png`)
 - **(Optional)** Repo mirror
   - Path: `/docs/evidence/SCRUM-26/`
-  - Filenames: `01-search.png`, `02-results.png`, `03-details.png`, `04-booking.png`, `05-confirm.png` (as suits your app)
+  - Filenames: `01-search.png`, `02-results.png`, `03-details.png`, `04-booking.png`, `05-confirm.png` (as applicable)
 - **(Optional)** Evidence index file (repo)
   - `/docs/evidence/SCRUM-26/evidence-index.md`
 
 ## Screenshot quality check
+
 - [ ] Text is legible at 100% zoom (field labels, buttons, errors)
 - [ ] Covers at least one main booking-related screen (search/listing/details/booking/confirmation/admin)
-- [] Preferred: end-to-end flow coverage (as available)
+- [ ] Preferred: end-to-end flow coverage (as available)
 
 ---
 
@@ -30,30 +31,30 @@
 - [ ] Search
 - [ ] Results (listing)
 - [ ] Hotel details
-- [ ] Foom selection
+- [ ] Room selection
 - [ ] Guest details form
 - [ ] Booking confirmation
 - [ ] Admin / Manage hotels / Manage bookings
 
-- **Notes:** describe the main flow as a short arrow list, e.g. `Home → Room → Dates → Guest Info → Success`.
+- **Notes:** describe the main flow as a short arrow list, e.g. `Home → Search → 2 Results ‒> 3 Details ‒> 4 Guest Info ‒> 5 Success`.
 
 ---
 
 ## 3) Data Sources / Integrations
 
-- **Data source type:** mock / static / SQLite / rest API / other: _____________________________
-- **Availability:** real-bime / assumed / not checked: ____________________________
-- **Pricing:** real / static / not calculated: ___________________________
-- **Authentication:** YES / NO - if YES, how? ____________________________
-- **Payments:** IN SCOPE / OUT OF SCOPE - if in scope, provider?: _____________________________
-- **External integrations:** (email/sms/analytics/etc) ____________________________
+- **Data source type:** mock / static / SQLite / REST API / other: ______________________________________________
+- **Availability:** real-time / assumed / not checked: ______________________________________________
+- **Pricing:** real / static / not calculated: ______________________________________________
+- **Authentication:** YES / NO — if YES, how? ______________________________________________
+- **Payments:** IN SCOPE / OUT OF SCOPE – if in scope, provider? provider: _____________________________________________
+- **External integrations:** (email/sms/analytics/etc.) _____________________________________________
 
 ---
 
 ## 4) MVP Scope + Out of Scope
 
-- **Intended MVP scope:** ____________________________
-- **Out of scope (explicit):** ____________________________
+- **Intended MVP scope:** ______________________________________________
+- **Out of scope (explicit):** ______________________________________________
 
 ---
 
@@ -63,8 +64,10 @@
 - ---
 - ---
 
+---
+
 ## 6) Run / Build Notes (Non-Secret)
 
-- Npde / Java version: _____________________________
-- Required env vars (names only): ____________________________
-- Local run commands: ____________________________
+- **Node / Java version:** ______________________________________________
+- **Required env vars (names only):** ______________________________________________
+- **Local run commands3���________________________________________________
